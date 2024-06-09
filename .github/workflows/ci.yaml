@@ -1,0 +1,59 @@
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run tests
+      run: npm test
+
+    - name: Generate coverage report
+      run: npm run coverage
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v2
+      with:
+        name: coverage-report
+        path: coverage/
+
+    - name: Compare coverage
+      run: |
+        COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+        PREVIOUS_COVERAGE=$(curl -s ${{ secrets.PREVIOUS_COVERAGE_URL }} | jq '.total.lines.pct')
+        echo "Current coverage: $COVERAGE"
+        echo "Previous coverage: $PREVIOUS_COVERAGE"
+        if (( $(echo "$COVERAGE < $PREVIOUS_COVERAGE" | bc -l) )); then
+          echo "Coverage decreased"
+          exit 1
+        fi
+
+    - name: Format code
+      run: npm run format
+
+    - name: Commit formatted code
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add .
+        git commit -m "Auto format code"
+      if: success()
+
+    - name: Push changes
+      uses: ad-m/github-push-action@v0.6.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+      if: success()
